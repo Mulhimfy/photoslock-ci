@@ -1,0 +1,22 @@
+appId: com.photoslocked.app
+---
+# After fast + spam: the dial still opens and an action still runs.
+- runFlow:
+    when:
+      visible: "Close"
+    commands:
+      - tapOn: "Close"
+- waitForAnimationToEnd:
+    timeout: 2000
+- tapOn: "Add"
+- extendedWaitUntil:
+    visible: "Import Photos"
+    timeout: 3000
+- tapOn: "Import Photos"
+- waitForAnimationToEnd:
+    timeout: 4000
+- takeScreenshot: s41_picker_after_spam
+- back
+- extendedWaitUntil:
+    visible: "Albums"
+    timeout: 10000

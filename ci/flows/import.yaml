@@ -1,0 +1,22 @@
+appId: com.photoslocked.app
+---
+# + → Import Photos (double tap) opens the system picker once; back; + still works.
+- tapOn: "Add"
+- extendedWaitUntil:
+    visible: "Import Photos"
+    timeout: 3000
+- doubleTapOn: "Import Photos"
+- waitForAnimationToEnd:
+    timeout: 4000
+- takeScreenshot: s20_picker
+- back
+- extendedWaitUntil:
+    visible: "Albums"
+    timeout: 10000
+- takeScreenshot: s21_back_from_picker
+- tapOn: "Add"
+- extendedWaitUntil:
+    visible: "Import Photos"
+    timeout: 3000
+- takeScreenshot: s22_dial_again
+- tapOn: "Close"

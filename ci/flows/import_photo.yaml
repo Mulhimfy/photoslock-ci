@@ -1,0 +1,25 @@
+appId: com.photoslocked.app
+---
+# + → Import Photos → pick the test picture in the system picker → back in the vault.
+- tapOn: "Add"
+- extendedWaitUntil:
+    visible: "Import Photos"
+    timeout: 3000
+- tapOn: "Import Photos"
+- extendedWaitUntil:
+    visible: "pl_test_1.png"
+    timeout: 15000
+- takeScreenshot: s50_picker_with_photo
+- tapOn: "pl_test_1.png"
+- waitForAnimationToEnd:
+    timeout: 6000
+- takeScreenshot: s51_after_pick
+- runFlow:
+    when:
+      visible: "Not Now|Keep Them|Later|Got It|OK"
+    commands:
+      - takeScreenshot: s52_after_import_prompt
+      - tapOn: "Not Now|Keep Them|Later|Got It|OK"
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: s53_after_import

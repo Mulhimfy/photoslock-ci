@@ -1,0 +1,31 @@
+appId: com.photoslocked.app
+---
+# + → More → New Album → name → Create tapped twice fast.
+- tapOn: "Add"
+- extendedWaitUntil:
+    visible: "Import Photos"
+    timeout: 3000
+- takeScreenshot: s10_dial
+- tapOn: "More"
+- extendedWaitUntil:
+    visible: "New Note"
+    timeout: 3000
+- takeScreenshot: s11_more
+- tapOn:
+    text: "New Album"
+    below: "New Note"
+- extendedWaitUntil:
+    visible: "Create"
+    timeout: 3000
+- inputText: "Trip"
+- takeScreenshot: s12_prompt
+- doubleTapOn: "Create"
+- extendedWaitUntil:
+    visible: "Trip"
+    timeout: 5000
+- takeScreenshot: s13_after_create
+- back
+- extendedWaitUntil:
+    visible: "Albums"
+    timeout: 5000
+- takeScreenshot: s14_albums_after
