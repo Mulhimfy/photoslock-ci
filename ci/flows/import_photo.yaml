@@ -16,10 +16,10 @@ appId: com.photoslocked.app
 - takeScreenshot: s51_after_pick
 - runFlow:
     when:
-      visible: "Not Now|Keep Them|Later|Got It|OK"
+      visible: "Done|Not Now|Keep Them|Later|Got It|OK"
     commands:
       - takeScreenshot: s52_after_import_prompt
-      - tapOn: "Not Now|Keep Them|Later|Got It|OK"
+      - tapOn: "Done|Not Now|Keep Them|Later|Got It|OK"
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: s53_after_import
