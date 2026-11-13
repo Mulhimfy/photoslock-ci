@@ -1,0 +1,26 @@
+appId: com.photoslocked.app
+---
+# Edit → the "Trip" album → Delete Album (double tap) → Delete (double tap): one dialog, one delete.
+- tapOn: "Edit"
+- tapOn: "Trip"
+- extendedWaitUntil:
+    visible: "Delete Album"
+    timeout: 4000
+- takeScreenshot: s60_album_menu
+- doubleTapOn: "Delete Album"
+- extendedWaitUntil:
+    visible: "Delete"
+    timeout: 5000
+- takeScreenshot: s61_delete_dialog
+- doubleTapOn: "Delete"
+- extendedWaitUntil:
+    notVisible: "Delete"
+    timeout: 5000
+- waitForAnimationToEnd:
+    timeout: 2000
+- takeScreenshot: s62_after_delete
+- runFlow:
+    when:
+      visible: "Done"
+    commands:
+      - tapOn: "Done"

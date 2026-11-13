@@ -1,0 +1,24 @@
+appId: com.photoslocked.app
+---
+# Relaunch: the lock screen, its keypad, back into the vault; + still works.
+- launchApp:
+    stopApp: true
+- extendedWaitUntil:
+    visible: "Enter Passcode|Enter your passcode|Unlock"
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 2000
+- takeScreenshot: s70_lock
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- extendedWaitUntil:
+    visible: "Albums"
+    timeout: 20000
+- takeScreenshot: s71_unlocked
+- tapOn: "Add"
+- extendedWaitUntil:
+    visible: "Import Photos"
+    timeout: 3000
+- tapOn: "Close"
