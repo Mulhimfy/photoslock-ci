@@ -47,6 +47,9 @@ jobs:
               const fs = require("fs"); const a = JSON.parse(fs.readFileSync("app.json", "utf8"));
               a.expo.updates = { ...a.expo.updates, checkAutomatically: "NEVER" };
               fs.writeFileSync("app.json", JSON.stringify(a, null, 2));'
+            # Test build only: no FLAG_SECURE, so the test can take screenshots.
+            sed -i 's/if (on) await SC.preventScreenCaptureAsync(KEY);/if (false) await SC.preventScreenCaptureAsync(KEY);/' src/security/screenPrivacy.js
+            grep -q 'if (false) await SC.preventScreenCaptureAsync' src/security/screenPrivacy.js
             npx expo prebuild --platform android --no-install
             echo "org.gradle.jvmargs=-Xmx8g -XX:MaxMetaspaceSize=2g" >> android/gradle.properties
             # Release lint ("lintVital") runs out of memory on the runner; it checks nothing this test needs.
