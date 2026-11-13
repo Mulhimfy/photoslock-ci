@@ -34,6 +34,8 @@ flow() { # name file -> 0 on pass
   return $rc
 }
 alive() { adb shell pidof $PKG >/dev/null 2>&1; }
+# After a failed step: relaunch and unlock, so one failure can't break the next checks.
+recover() { log "recover after $1"; flow "recover-$1" relock.yaml >/dev/null 2>&1 || true; }
 
 adb wait-for-device
 log "sdk $(adb shell getprop ro.build.version.sdk | tr -d '\r')"
@@ -45,9 +47,16 @@ LOGPID=$!
 # 1. First run: onboarding (shot twice, 1.2 s apart), passcode, welcome.
 if flow setup setup.yaml; then res PASS "first run: onboarding, passcode, welcome to Albums"; else res FAIL "first run" "see maestro-setup.txt"; fi
 
-# A picture for the import test (taken now, so it is a real image).
-adb shell screencap -p /sdcard/Pictures/pl_test_1.png
+# A picture for the import test: a real screenshot, pushed and indexed
+# (the scan broadcast alone is ignored on Android 11).
+adb exec-out screencap -p > "$OUT/pl_test_1.png"
+adb shell mkdir -p /sdcard/Pictures
+adb push "$OUT/pl_test_1.png" /sdcard/Pictures/pl_test_1.png >/dev/null 2>&1
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/pl_test_1.png >/dev/null 2>&1
+adb shell content call --uri content://media --method scan_volume --arg external_primary >/dev/null 2>&1
+sleep 3
+adb shell content query --uri content://media/external/images/media --projection _display_name 2>/dev/null | grep -q pl_test_1 \
+  && log "test picture indexed" || log "test picture NOT indexed"
 
 # 2. The + button's top half (it used to stand outside the tab bar's bounds,
 #    where Android dropped the touch). Three taps on its top edge.
@@ -75,21 +84,21 @@ if flow album album.yaml; then
   n=$(count_text albums1 Trip)
   [ "$n" = 1 ] && res PASS "More → New Album → Create x2 makes 1 album" || res FAIL "Create x2 made $n albums named Trip"
 else
-  res FAIL "More → New Album flow" "see maestro-album.txt"
+  res FAIL "More → New Album flow" "see maestro-album.txt"; recover album
 fi
 
 # 4. Import Photos x2 → picker once → back → + still works.
-if flow import import.yaml; then res PASS "Import Photos x2 → picker, back, + works again"; else res FAIL "Import Photos flow" "see maestro-import.txt"; fi
+if flow import import.yaml; then res PASS "Import Photos x2 → picker, back, + works again"; else res FAIL "Import Photos flow" "see maestro-import.txt"; recover import; fi
 
 # 5. Camera opens the camera app → back → + still works.
-if flow camera camera.yaml; then res PASS "Camera opens the camera, back, + works again"; else res FAIL "Camera flow" "see maestro-camera.txt"; adb shell am start -n $PKG/.MainActivity >/dev/null 2>&1; sleep 3; fi
+if flow camera camera.yaml; then res PASS "Camera opens the camera, back, + works again"; else res FAIL "Camera flow" "see maestro-camera.txt"; recover camera; fi
 
 # 5b. A real import: pick the test picture through the + menu.
 if flow import_photo import_photo.yaml; then
   sleep 2; dump after_import > /dev/null
   grep -qE 'text="1 item|1 item' "$OUT/ui/after_import.xml" && res PASS "imported 1 photo through + → Import Photos" || res INFO "photo picked; check s51-s53 shots for the vault count"
 else
-  res FAIL "import a real photo" "see maestro-import_photo.txt"
+  res FAIL "import a real photo" "see maestro-import_photo.txt"; recover import_photo
 fi
 alive || { res FAIL "app died after import"; adb shell monkey -p $PKG 1 >/dev/null 2>&1; sleep 4; }
 
@@ -99,7 +108,7 @@ if flow delete delete.yaml; then
   n=$(count_text after_delete Trip)
   [ "$n" = 0 ] && res PASS "Delete Album x2 → Delete x2: one dialog, album gone" || res FAIL "after delete, $n albums named Trip"
 else
-  res FAIL "delete album flow" "see maestro-delete.txt"
+  res FAIL "delete album flow" "see maestro-delete.txt"; recover delete
 fi
 
 # 6. Spam the + six times, then it must still open and run an action.
