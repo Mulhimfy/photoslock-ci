@@ -1,0 +1,11 @@
+appId: com.photoslocked.app
+---
+# In the viewer: Share opens the system share sheet.
+- extendedWaitUntil:
+    visible: "Share"
+    timeout: 8000
+- takeScreenshot: s96_viewer
+- tapOn: "Share"
+- waitForAnimationToEnd:
+    timeout: 6000
+- takeScreenshot: s97_share_sheet

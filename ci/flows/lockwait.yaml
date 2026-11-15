@@ -1,0 +1,10 @@
+appId: com.photoslocked.app
+---
+# Relaunch and stop on the lock screen (the keys are then tapped by adb, fast).
+- launchApp:
+    stopApp: true
+- extendedWaitUntil:
+    visible: "Enter Passcode|Enter your passcode|Unlock"
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 2000

@@ -124,10 +124,74 @@ if flow after_spam after_spam.yaml; then res PASS "after 6 fast + taps, menu + I
 # 6b. Relaunch through the lock screen.
 if flow relock relock.yaml; then res PASS "relaunch: lock screen keypad unlocks, + works"; else res FAIL "relaunch / lock screen" "see maestro-relock.txt"; fi
 
-# 7. Crashes / ANRs during the whole run.
+# 7. A tour: every tab, the Library and Settings screens in and out.
+if flow tour tour.yaml; then res PASS "tour: Library, Notes, Browser, Settings pages in and out"; else res FAIL "tour of the screens" "see maestro-tour.txt"; recover tour; fi
+alive || { res FAIL "app died during the tour"; recover tour-dead; }
+
+# 8. Share from the viewer: the system share sheet opens and the app survives it.
+if flow share share.yaml; then
+  dump all_media > /dev/null
+  CELL=$(python3 "$(pwd)/ci/first_cell.py" "$OUT/ui/all_media.xml")
+  if [ -n "$CELL" ]; then
+    adb shell input tap $CELL; sleep 2
+    if flow share_tap share_tap.yaml; then
+      focus=$(adb shell dumpsys window 2>/dev/null | grep -m1 mCurrentFocus | tr -d '\r')
+      log "focus after Share: $focus"
+      echo "$focus" | grep -qiE "Chooser|Resolver|intentresolver" && res PASS "Share opens the system share sheet" || res INFO "Share tapped, system sheet not seen in focus"
+      adb shell input keyevent 4; sleep 2; shot s98_after_share
+      alive && res PASS "app alive after the share sheet" || res FAIL "app died after the share sheet"
+    else
+      res FAIL "viewer Share" "see maestro-share_tap.txt"
+    fi
+  else
+    res INFO "no photo cell found in All Media (ui/all_media.xml)"
+  fi
+else
+  res FAIL "Library → All Media" "see maestro-share.txt"
+fi
+recover share
+
+# 9. Many screen changes in a row.
+if flow stress stress.yaml; then res PASS "12 page pushes, 20 tab hops, 4 + menus in a row"; else res FAIL "screen-change stress" "see maestro-stress.txt"; recover stress; fi
+alive || { res FAIL "app died during the stress"; recover stress-dead; }
+
+# 10. The lock screen: a wrong passcode, then five relaunches with the four
+#     digits tapped as fast as adb can (a spring still running under each digit).
+if flow wrongpin wrongpin.yaml; then res PASS "wrong passcode shakes, right one unlocks"; else res FAIL "wrong passcode flow" "see maestro-wrongpin.txt"; fi
+fast_ok=0
+for i in 1 2 3 4 5; do
+  if flow "lockwait$i" lockwait.yaml; then
+    dump "lock$i" > /dev/null
+    T=""
+    for d in 1 2 3 4; do
+      B=$(bounds "lock$i" $d); [ -n "$B" ] || continue
+      read X1 Y1 X2 Y2 <<< "$B"; T="$T input tap $(( (X1 + X2) / 2 )) $(( (Y1 + Y2) / 2 ));"
+    done
+    adb shell "$T"; sleep 4
+    dump "unlocked$i" | grep -q 'content-desc="Add"' && fast_ok=$((fast_ok + 1))
+  fi
+done
+[ $fast_ok = 5 ] && res PASS "5 relaunches with fast passcode taps all unlock" || res FAIL "fast passcode taps unlocked $fast_ok/5"
+
+# 11. The daily reminder: saved and handed to the alarm manager.
+adb shell dumpsys alarm > "$OUT/alarms.txt" 2>/dev/null
+alarms=$(grep -c "$PKG" "$OUT/alarms.txt" 2>/dev/null)
 sleep 2
 alive && log "app alive at end" || log "app NOT running at end"
 kill $LOGPID 2>/dev/null
+notif=$(grep -c "expo-notifications: Action .* failed" "$OUT/logcat.txt" 2>/dev/null)
+[ "${notif:-0}" = 0 ] && [ "${alarms:-0}" -ge 1 ] && res PASS "reminder saved and scheduled" "alarm lines: $alarms" || res FAIL "reminder not scheduled" "save failures ${notif:-0}, alarm lines ${alarms:-0}"
+
+# 12. React Native's animation engine: its own error lines, and JS errors.
+anim=$(grep -cE "Native animation workaround|Mapped style node|Mapped property node|animation cycle or disconnected graph" "$OUT/logcat.txt" 2>/dev/null)
+illegal=$(grep -c "JSApplicationIllegalArgumentException" "$OUT/logcat.txt" 2>/dev/null)
+jserr=$(grep -cE " E ReactNativeJS" "$OUT/logcat.txt" 2>/dev/null)
+soft=$(grep -c "ReactNoCrashSoftException" "$OUT/logcat.txt" 2>/dev/null)
+[ "${anim:-0}" = 0 ] && [ "${illegal:-0}" = 0 ] && res PASS "no animation engine errors in logcat" || res FAIL "animation engine errors" "race lines ${anim:-0}, illegal argument ${illegal:-0}"
+[ "${jserr:-0}" = 0 ] && res PASS "no JS errors in logcat" || res FAIL "JS errors in logcat: $jserr"
+res INFO "soft exceptions ${soft:-0}"
+
+# 13. Crashes / ANRs during the whole run.
 crashes=$(grep -c "FATAL EXCEPTION" "$OUT/logcat.txt" 2>/dev/null)
 anrs=$(grep -c "ANR in $PKG" "$OUT/logcat.txt" 2>/dev/null)
 [ "${crashes:-0}" = 0 ] && [ "${anrs:-0}" = 0 ] && res PASS "no crash, no ANR in logcat" || res FAIL "crashes $crashes, ANRs $anrs"

@@ -1,0 +1,11 @@
+appId: com.photoslocked.app
+---
+# Library → All Media (the grid with the imported picture).
+- tapOn: "Library"
+- extendedWaitUntil:
+    visible: "All Media"
+    timeout: 8000
+- tapOn: "All Media"
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: s95_all_media

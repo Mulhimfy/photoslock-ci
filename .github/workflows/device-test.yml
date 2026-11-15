@@ -14,7 +14,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: device-test
+  group: device-test-${{ inputs.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -58,6 +58,18 @@ jobs:
           } > "$RUNNER_TEMP/out/build.log" 2>&1
           rc=$?
           git rev-parse --short HEAD > "$RUNNER_TEMP/out/commit.txt"
+          # Which patched modules were compiled here (they have a Gradle build
+          # folder), and whether two strings that exist only in the patches are
+          # in the APK.
+          {
+            for m in expo-video expo-image expo-sharing expo-local-authentication expo-share-intent; do
+              if [ -d "node_modules/$m/android/build" ]; then echo "INFO $m: compiled from source"; else echo "INFO $m: prebuilt"; fi
+            done
+            dex() { unzip -p android/app/build/outputs/apk/release/app-release.apk 'classes*.dex' 2>/dev/null | grep -c -a "$1"; }
+            if [ "$(dex 'Could not reattach player on fullscreen exit')" -ge 1 ]; then echo "INFO APK has the expo-video patch"; else echo "INFO APK lacks the expo-video patch"; fi
+            if [ "$(dex 'share result for a settled promise')" -ge 1 ]; then echo "INFO APK has the expo-sharing patch"; else echo "INFO APK lacks the expo-sharing patch"; fi
+          } > "$RUNNER_TEMP/out/build-info.txt" 2>/dev/null
+          cat "$RUNNER_TEMP/out/build-info.txt"
           cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/app.apk" 2>/dev/null
           echo "build exit $rc, commit $(cat "$RUNNER_TEMP/out/commit.txt")"
           test -f "$RUNNER_TEMP/app.apk"
@@ -91,6 +103,7 @@ jobs:
         if: always()
         run: |
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/out/build-info.txt" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           grep -E '^(PASS|FAIL|INFO) ' "$RUNNER_TEMP/out/summary.txt" | cut -c1-120 >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "no summary" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
       - name: Seal the outputs

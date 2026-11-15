@@ -1,0 +1,33 @@
+appId: com.photoslocked.app
+---
+# Many screen changes in a row: a Settings page in and out, then tab hops, then the + menu.
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible: "Change Passcode"
+    timeout: 8000
+- repeat:
+    times: 12
+    commands:
+      - tapOn: "Break-in Report"
+      - back
+- extendedWaitUntil:
+    visible: "Change Passcode"
+    timeout: 8000
+- repeat:
+    times: 5
+    commands:
+      - tapOn: "Albums"
+      - tapOn: "Library"
+      - tapOn: "Browser"
+      - tapOn: "Settings"
+- tapOn: "Albums"
+- repeat:
+    times: 4
+    commands:
+      - tapOn: "Add"
+      - tapOn: "More"
+      - tapOn: "Back"
+      - tapOn: "Close"
+- extendedWaitUntil:
+    visible: "Add"
+    timeout: 8000

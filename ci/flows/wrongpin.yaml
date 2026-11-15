@@ -1,0 +1,22 @@
+appId: com.photoslocked.app
+---
+# Relaunch, a wrong passcode (the dots shake), then the right one.
+- launchApp:
+    stopApp: true
+- extendedWaitUntil:
+    visible: "Enter Passcode|Enter your passcode|Unlock"
+    timeout: 30000
+- tapOn: "9"
+- tapOn: "9"
+- tapOn: "9"
+- tapOn: "9"
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: s90_wrong_pin
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- extendedWaitUntil:
+    visible: "Albums"
+    timeout: 20000
