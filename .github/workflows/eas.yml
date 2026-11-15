@@ -1,0 +1,99 @@
+# Photos Lock: the EAS jobs that need more memory than the VPS has, run here.
+#   update   bundle the JS at a commit and publish it as an OTA update (Android,
+#            branch production), only if the commit's native fingerprint is the
+#            runtime named in the input
+#   build    start the production Android build (AAB) on EAS at a commit
+# Workflows only. The app source is checked out at run time with a read-only
+# deploy key (no credentials persisted). EXPO_TOKEN is an encrypted secret seen
+# by one step. Every log is encrypted before upload; the public page shows only
+# OK / FAIL lines, the runtime hash and the update or build id.
+name: eas
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: update | build
+        required: true
+        default: update
+      ref:
+        description: Photos-lock commit (full SHA) or branch
+        required: true
+      runtime:
+        description: Android runtime (fingerprint) the commit must have
+        required: true
+      message:
+        description: Update message (update only)
+        default: ""
+permissions:
+  contents: read
+concurrency:
+  group: eas
+  cancel-in-progress: false
+
+jobs:
+  eas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Mulhimfy/Photos-lock
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          persist-credentials: false
+          path: app
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install, check the runtime
+        env:
+          WANT: ${{ inputs.runtime }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          cd app
+          git rev-parse HEAD > "$RUNNER_TEMP/out/commit.txt"
+          npm ci --no-audit --no-fund > "$RUNNER_TEMP/out/install.log" 2>&1 || { echo "FAIL npm ci"; exit 1; }
+          npx expo-updates fingerprint:generate --platform android > "$RUNNER_TEMP/out/fingerprint.json" 2> "$RUNNER_TEMP/out/fingerprint.log" || true
+          GOT=$(node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");try{console.log(JSON.parse(s.slice(s.indexOf("{"))).hash)}catch(e){console.log("none")}' "$RUNNER_TEMP/out/fingerprint.json")
+          echo "runtime here: $GOT"
+          if [ "$GOT" = "$WANT" ]; then echo "OK runtime matches"; else echo "FAIL runtime differs from the input"; exit 1; fi
+      - name: EAS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          JOB: ${{ inputs.job }}
+          MSG: ${{ inputs.message }}
+        run: |
+          cd app
+          case "$JOB" in
+            update)
+              npx --yes eas-cli@latest update --branch production --platform android --message "$MSG" --non-interactive --json > "$RUNNER_TEMP/out/update.json" 2> "$RUNNER_TEMP/out/eas.log"
+              rc=$?
+              node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");try{const j=JSON.parse(s.slice(s.indexOf("[")));for(const u of j)console.log("OK update group "+u.group+" platform "+u.platform+" runtime "+u.runtimeVersion)}catch(e){console.log("no update json")}' "$RUNNER_TEMP/out/update.json"
+              ;;
+            build)
+              npx --yes eas-cli@latest build --platform android --profile production --non-interactive --no-wait --json > "$RUNNER_TEMP/out/build.json" 2> "$RUNNER_TEMP/out/eas.log"
+              rc=$?
+              node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");try{const j=JSON.parse(s.slice(s.indexOf("[")));for(const b of j)console.log("OK build "+b.id+" "+b.platform+" version "+b.appVersion+" ("+b.appBuildVersion+") runtime "+b.runtimeVersion)}catch(e){console.log("no build json")}' "$RUNNER_TEMP/out/build.json"
+              ;;
+            *)
+              echo "FAIL unknown job"; rc=2
+              ;;
+          esac
+          echo "eas exit $rc"
+          exit $rc
+      - name: Seal the outputs
+        if: always()
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          mkdir -p sealed
+          tar czf "$RUNNER_TEMP/out.tgz" -C "$RUNNER_TEMP" out
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_KEY -in "$RUNNER_TEMP/out.tgz" -out sealed/out.tgz.sealed
+          rm -rf "$RUNNER_TEMP/out" "$RUNNER_TEMP/out.tgz" app
+          ls -la sealed
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealed
+          path: sealed/out.tgz.sealed
+          retention-days: 3
