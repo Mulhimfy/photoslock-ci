@@ -176,6 +176,22 @@ done
 # 11. The daily reminder: saved and handed to the alarm manager.
 adb shell dumpsys alarm > "$OUT/alarms.txt" 2>/dev/null
 alarms=$(grep -c "$PKG" "$OUT/alarms.txt" 2>/dev/null)
+
+# 11b. And it fires: the clock is moved to 19:59:30 tomorrow, so both the 8pm
+#      reminder and the day-one nudge are due within the minute.
+adb root >/dev/null 2>&1; sleep 4; adb wait-for-device
+adb shell settings put global auto_time 0 >/dev/null 2>&1
+log "clock: $(adb shell date "$(date -d tomorrow +%m%d)1959.30" 2>&1 | tr -d '\r')"
+fired=0
+for i in 1 2 3 4 5 6 7 8 9; do
+  sleep 10
+  adb shell dumpsys notification --noredact > "$OUT/notifications.txt" 2>/dev/null
+  fired=$(grep -c "NotificationRecord.*pkg=$PKG" "$OUT/notifications.txt" 2>/dev/null)
+  [ "${fired:-0}" -ge 1 ] && break
+done
+shot s99_after_8pm
+[ "${fired:-0}" -ge 1 ] && res PASS "the reminder fires at 8pm" "notifications posted: $fired" || res FAIL "no reminder posted at 8pm"
+alive || res FAIL "app died when the reminder fired"
 sleep 2
 alive && log "app alive at end" || log "app NOT running at end"
 kill $LOGPID 2>/dev/null
