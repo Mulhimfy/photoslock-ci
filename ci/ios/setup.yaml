@@ -1,0 +1,52 @@
+appId: com.photo-locked.app
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Continue"
+    timeout: 90000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: i01_onboarding_a
+- swipe:
+    direction: DOWN
+    duration: 1200
+- takeScreenshot: i01_onboarding_b
+- tapOn: "Continue"
+- tapOn: "Continue"
+- takeScreenshot: i02_onboarding_last
+- tapOn: "Get Started"
+- extendedWaitUntil:
+    visible: "Create a Passcode"
+    timeout: 20000
+- takeScreenshot: i03_passcode
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- extendedWaitUntil:
+    visible: "Confirm Passcode"
+    timeout: 10000
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- extendedWaitUntil:
+    visible: "Later|Not Now"
+    timeout: 20000
+- takeScreenshot: i04_welcome
+- runFlow:
+    when:
+      visible: "Not Now"
+    commands:
+      - tapOn: "Not Now"
+- tapOn: "Later"
+- extendedWaitUntil:
+    visible: "Albums"
+    timeout: 20000
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - tapOn: "Allow"
+- takeScreenshot: i05_albums

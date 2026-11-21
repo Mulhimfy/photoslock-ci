@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: Mulhimfy/Photos-lock
           ref: ${{ inputs.ref }}
@@ -33,9 +34,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
       - name: Build for the simulator (Release, embedded bundle, no OTA check)
         run: |
-          mkdir -p "$RUNNER_TEMP/out"
+          mkdir -p "$RUNNER_TEMP/out"; : > "$RUNNER_TEMP/out/summary.txt"
           cd app
           git rev-parse --short HEAD > "$RUNNER_TEMP/out/commit.txt"
           {
@@ -60,10 +65,27 @@ jobs:
           echo "$APP" > "$RUNNER_TEMP/app-path.txt"
           echo "build exit $rc, commit $(cat "$RUNNER_TEMP/out/commit.txt")"
           [ -s "$RUNNER_TEMP/out/appdelegate-lines.txt" ] && echo "INFO AppDelegate has the backup exclusion" || echo "INFO AppDelegate lacks the backup exclusion"
+          # Autolinking registered the notes cipher (modules/photoslock-cipher)?
+          if grep -rqs "PhotosLockCipherModule" ios/Pods/Target\ Support\ Files/*/ExpoModulesProvider.swift ios/*/ExpoModulesProvider.swift; then
+            echo "PASS the notes cipher module is linked" | tee -a "$RUNNER_TEMP/out/summary.txt"
+          else
+            echo "FAIL the notes cipher module is not linked" | tee -a "$RUNNER_TEMP/out/summary.txt"
+          fi
           test -n "$APP"
+      - name: Notes cipher, CryptoKit against the JS library
+        run: |
+          cd app
+          NODE_PATH="$PWD/node_modules" node ../ci/ios/vectors.js > "$RUNNER_TEMP/vectors.json"
+          swiftc -O modules/photoslock-cipher/ios/NotesCipherCore.swift ../ci/ios/cipher_check.swift -o "$RUNNER_TEMP/cipher_check" > "$RUNNER_TEMP/out/cipher-build.log" 2>&1 \
+            && "$RUNNER_TEMP/cipher_check" "$RUNNER_TEMP/vectors.json" | tee -a "$RUNNER_TEMP/out/summary.txt" \
+            || echo "FAIL the cipher check did not build or run" | tee -a "$RUNNER_TEMP/out/summary.txt"
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - name: Launch on a simulator, check the backup flag
         run: |
-          OUT="$RUNNER_TEMP/out"; : > "$OUT/summary.txt"
+          OUT="$RUNNER_TEMP/out"
           res() { echo "$1 $2" | tee -a "$OUT/summary.txt"; }
           APP=$(cat "$RUNNER_TEMP/app-path.txt")
           BID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist")
@@ -89,6 +111,17 @@ jobs:
           got=$(swift "$RUNNER_TEMP/excluded.swift" "$DATA/Documents" 2>>"$OUT/sim.log" || echo "unknown")
           if [ "$got" = "excluded" ]; then res PASS "Documents (the vault) is excluded from backup"; else res FAIL "Documents (the vault) is in the backup" "$got"; fi
           grep -q com_apple_backup_excludeItem "$OUT/documents-xattr.txt" && res INFO "Documents has the backup-exclusion attribute" || res INFO "no backup-exclusion attribute on Documents"
+          # A secure note through the app: sealed by CryptoKit on save, opened again after a relaunch.
+          mkdir -p "$OUT/maestro"
+          flow() { (cd "$OUT/maestro" && maestro --device "$DEV" test --debug-output "$OUT/maestro/$1" "$GITHUB_WORKSPACE/ci/ios/$1.yaml") > "$OUT/maestro-$1.txt" 2>&1; }
+          if flow setup; then
+            res PASS "first run on iOS: onboarding, passcode, Albums"
+            if flow note; then res PASS "a secure note is saved (sealed by CryptoKit)"; else res FAIL "saving a secure note" "see maestro-note.txt"; fi
+            if flow note_reopen; then res PASS "after a relaunch the note opens again (CryptoKit)"; else res FAIL "the note did not open after a relaunch" "see maestro-note_reopen.txt"; fi
+          else
+            res FAIL "first run on iOS" "see maestro-setup.txt"
+          fi
+          find "$OUT/maestro" -name '*.png' -exec cp {} "$OUT/" \; 2>/dev/null
           xcrun simctl spawn "$DEV" log show --last 2m --predicate "process == \"$EXE\"" > "$OUT/app-log.txt" 2>&1 || true
           xcrun simctl shutdown "$DEV" > /dev/null 2>&1 || true
       - name: Results (public lines are PASS / FAIL / INFO only)

@@ -1,0 +1,28 @@
+appId: com.photo-locked.app
+---
+# Relaunch, unlock, open the note again: read back from the file, opened by CryptoKit.
+- launchApp:
+    stopApp: true
+- extendedWaitUntil:
+    visible: "Enter Passcode|Enter your passcode|Unlock"
+    timeout: 60000
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- extendedWaitUntil:
+    visible: "Albums"
+    timeout: 20000
+- tapOn: "Library"
+- extendedWaitUntil:
+    visible: "Secure Notes"
+    timeout: 10000
+- tapOn: "Secure Notes"
+- extendedWaitUntil:
+    visible: "CI sealed note"
+    timeout: 10000
+- tapOn: "CI sealed note"
+- extendedWaitUntil:
+    visible: "opened by CryptoKit"
+    timeout: 10000
+- takeScreenshot: i11_note_reopened
