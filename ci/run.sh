@@ -189,16 +189,37 @@ fs_any() {
   adb shell dumpsys activity activities 2>/dev/null | grep FullscreenPlayerActivity > "$OUT/fs-records-$1.txt"
   grep -cE "Hist #[0-9]+: ActivityRecord" "$OUT/fs-records-$1.txt"
 }
-# Taps the player's fullscreen button through Maestro (flows/fullscreen.yaml); 0
-# once fullscreen is up. A uiautomator dump waits for an idle screen, which a
-# playing video's progress bar never gives: by the time it came, the controls
-# had hidden again (runs 44893444682, 44896373959).
+# bounds of the first node whose content-desc contains $2 (any case), from dump $1
+bounds_like() {
+  python3 - "$OUT/ui/$1.xml" "$2" <<'PY'
+import re, sys
+x = open(sys.argv[1], encoding='utf-8', errors='ignore').read()
+for n in re.findall(r'<node [^>]*>', x):
+    d = re.search(r'content-desc="([^"]*)"', n)
+    if d and sys.argv[2].lower() in d.group(1).lower():
+        b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n)
+        print(*b.groups()); break
+PY
+}
+# Enters fullscreen by tapping where the player's fullscreen button is: 26 dp
+# from its right edge and 30 dp from its bottom (media3's bar, seen in run
+# 44903439552's s104a). No screen reader can see the button in time: a dump
+# waits for a still screen, which a playing video's progress bar never gives,
+# and the controls hide after 5 s. With the controls hidden, the first tap shows
+# them and the second lands on the button; dumpsys (no waiting) says when it is up.
 fs_enter() {
-  local i
+  local i k P D
+  D=$(adb shell wm density 2>/dev/null | grep -o '[0-9]\+' | tail -1); D=${D:-440}
   for i in 1 2 3; do
-    flow "$1-$i" fullscreen.yaml >/dev/null 2>&1
-    sleep 2
-    [ "$(fs_top)" -ge 1 ] && return 0
+    dump "$1-$i" > /dev/null
+    P=$(bounds_like "$1-$i" "player controls")
+    [ -n "$P" ] || { sleep 2; continue; }
+    read X1 Y1 X2 Y2 <<< "$P"
+    for k in 1 2; do
+      adb shell input tap $(( X2 - 26 * D / 160 )) $(( Y2 - 30 * D / 160 )); sleep 2.5
+      [ "$(fs_top)" -ge 1 ] && return 0
+    done
+    sleep 6
   done
   return 1
 }
@@ -219,9 +240,6 @@ else
     res FAIL "no video in Library → Videos" "see ui/videos.xml"
   else
     adb shell input tap $CELL; sleep 3; shot s103_video_viewer
-    # What a tap on the video shows, caught by screenshots (they don't wait for a
-    # still screen); the controls hide again after 5 s.
-    adb shell input tap 540 1146; sleep 0.7; shot s104a_after_tap; sleep 1.5; shot s104b_after_tap; sleep 5
     if fs_enter fs1; then
       shot s104_fullscreen
       sleep 7; adb shell input keyevent 4; sleep 3
@@ -239,10 +257,10 @@ else
         adb shell dumpsys activity activities 2>/dev/null | grep -E "mResumedActivity|topResumedActivity" > "$OUT/fs-resumed.txt"
         if locked fs_return; then res PASS "back through Recents after Home from fullscreen: the lock screen"; else res FAIL "back through Recents after Home from fullscreen: no lock screen" "see ui/fs_return.xml, fs-resumed.txt"; fi
       else
-        res FAIL "fullscreen did not open the second time" "see maestro-fs2-*.txt"
+        res FAIL "fullscreen did not open the second time" "see ui/fs2-*.xml"
       fi
     else
-      res FAIL "the fullscreen button was not found or did not open" "see maestro-fs1-*.txt"
+      res FAIL "the fullscreen button was not found or did not open" "see ui/fs1-*.xml"
     fi
   fi
   recover fullscreen
