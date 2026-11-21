@@ -1,21 +1,22 @@
 appId: com.photo-locked.app
 ---
+# iOS reads a row's label with its count ("Secure Notes, 0"): patterns, not exact text.
 # A new secure note: sealed on save by notesCipher.ios.js, so by CryptoKit.
 - tapOn: "Library"
 - extendedWaitUntil:
-    visible: "Secure Notes"
+    visible: "Secure Notes.*"
     timeout: 10000
-- tapOn: "Secure Notes"
+- tapOn: "Secure Notes.*"
 - extendedWaitUntil:
-    visible: "New Note"
+    visible: ".*New Note.*"
     timeout: 10000
-- tapOn: "New Note"
-- tapOn: "Title"
+- tapOn: ".*New Note.*"
+- tapOn: "Title.*"
 - inputText: "CI sealed note"
 - tapOn: "Write something private.*"
 - inputText: "opened by CryptoKit"
 - tapOn: "Back"
 - extendedWaitUntil:
-    visible: "CI sealed note"
+    visible: ".*CI sealed note.*"
     timeout: 10000
 - takeScreenshot: i10_note_saved
