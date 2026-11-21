@@ -31,9 +31,11 @@ appId: com.photo-locked.app
 - tapOn: "2"
 - tapOn: "3"
 - tapOn: "4"
+# The Welcome step waits for Face ID's first answer, and the CI simulator took
+# 41 s to make its first LAContext (run 44928285737).
 - extendedWaitUntil:
     visible: "Later|Not Now"
-    timeout: 20000
+    timeout: 120000
 - takeScreenshot: i04_welcome
 - runFlow:
     when:
