@@ -1,0 +1,115 @@
+# Photos Lock: an iOS build for the simulator at a Photos-lock commit, launched
+# once, then the checks that need iOS: the app starts, and its Documents folder
+# (the whole vault) is excluded from iCloud and computer backups (OPEN.md I4).
+# Nothing is signed, uploaded or published. Workflows only: the app source is
+# checked out at run time with a read-only deploy key (no credentials kept).
+# Every log is encrypted before upload; the public page shows only
+# PASS / FAIL / INFO lines.
+name: ios-check
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Photos-lock branch or commit
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: ios-check-${{ inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Mulhimfy/Photos-lock
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          persist-credentials: false
+          path: app
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build for the simulator (Release, embedded bundle, no OTA check)
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          cd app
+          git rev-parse --short HEAD > "$RUNNER_TEMP/out/commit.txt"
+          {
+            xcodebuild -version
+            npm ci --no-audit --no-fund
+            node -e '
+              const fs = require("fs"); const a = JSON.parse(fs.readFileSync("app.json", "utf8"));
+              a.expo.updates = { ...a.expo.updates, checkAutomatically: "NEVER" };
+              fs.writeFileSync("app.json", JSON.stringify(a, null, 2));'
+            CI=1 npx expo prebuild --platform ios --no-install
+            (cd ios && pod install)
+            WS=$(ls -d ios/*.xcworkspace | head -1)
+            SCHEME=$(basename "$WS" .xcworkspace)
+            echo "workspace $WS scheme $SCHEME"
+            xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator \
+              -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" \
+              ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+          } > "$RUNNER_TEMP/out/build.log" 2>&1
+          rc=$?
+          grep -n "PhotosLockBackup" ios/*/AppDelegate.swift > "$RUNNER_TEMP/out/appdelegate-lines.txt" 2>/dev/null
+          APP=$(find "$RUNNER_TEMP/dd/Build/Products" -maxdepth 2 -name '*.app' -type d | head -1)
+          echo "$APP" > "$RUNNER_TEMP/app-path.txt"
+          echo "build exit $rc, commit $(cat "$RUNNER_TEMP/out/commit.txt")"
+          [ -s "$RUNNER_TEMP/out/appdelegate-lines.txt" ] && echo "INFO AppDelegate has the backup exclusion" || echo "INFO AppDelegate lacks the backup exclusion"
+          test -n "$APP"
+      - name: Launch on a simulator, check the backup flag
+        run: |
+          OUT="$RUNNER_TEMP/out"; : > "$OUT/summary.txt"
+          res() { echo "$1 $2" | tee -a "$OUT/summary.txt"; }
+          APP=$(cat "$RUNNER_TEMP/app-path.txt")
+          BID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist")
+          EXE=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$APP/Info.plist")
+          DEV=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for k in sorted(d, reverse=True) if "iOS" in k for x in d[k] if x["name"].startswith("iPhone")))')
+          {
+            xcrun simctl boot "$DEV"; xcrun simctl bootstatus "$DEV" -b
+            xcrun simctl install "$DEV" "$APP"
+            xcrun simctl launch "$DEV" "$BID"
+          } > "$OUT/sim.log" 2>&1
+          sleep 25
+          xcrun simctl io "$DEV" screenshot "$OUT/launch.png" >/dev/null 2>&1
+          if pgrep -f "$EXE.app/$EXE" > /dev/null; then res PASS "the app is running 25 s after launch"; else res FAIL "the app is not running 25 s after launch"; fi
+          DATA=$(xcrun simctl get_app_container "$DEV" "$BID" data)
+          ls -la "$DATA/Documents" > "$OUT/documents.txt" 2>&1
+          xattr -l "$DATA/Documents" > "$OUT/documents-xattr.txt" 2>&1
+          cat > "$RUNNER_TEMP/excluded.swift" <<'SWIFT'
+          import Foundation
+          let url = URL(fileURLWithPath: CommandLine.arguments[1])
+          let v = try? url.resourceValues(forKeys: [.isExcludedFromBackupKey])
+          print(v?.isExcludedFromBackup == true ? "excluded" : "included")
+          SWIFT
+          got=$(swift "$RUNNER_TEMP/excluded.swift" "$DATA/Documents" 2>>"$OUT/sim.log" || echo "unknown")
+          if [ "$got" = "excluded" ]; then res PASS "Documents (the vault) is excluded from backup"; else res FAIL "Documents (the vault) is in the backup" "$got"; fi
+          grep -q com_apple_backup_excludeItem "$OUT/documents-xattr.txt" && res INFO "Documents has the backup-exclusion attribute" || res INFO "no backup-exclusion attribute on Documents"
+          xcrun simctl spawn "$DEV" log show --last 2m --predicate "process == \"$EXE\"" > "$OUT/app-log.txt" 2>&1 || true
+          xcrun simctl shutdown "$DEV" > /dev/null 2>&1 || true
+      - name: Results (public lines are PASS / FAIL / INFO only)
+        if: always()
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^(PASS|FAIL|INFO) ' "$RUNNER_TEMP/out/summary.txt" | cut -c1-120 >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "no summary" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Seal the outputs
+        if: always()
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          mkdir -p sealed
+          tar czf "$RUNNER_TEMP/out.tgz" -C "$RUNNER_TEMP" out
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_KEY -in "$RUNNER_TEMP/out.tgz" -out sealed/out.tgz.sealed
+          rm -rf "$RUNNER_TEMP/out" "$RUNNER_TEMP/out.tgz" "$RUNNER_TEMP/dd" app
+          ls -la sealed
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealed
+          path: sealed/out.tgz.sealed
+          retention-days: 3
