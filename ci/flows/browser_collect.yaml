@@ -1,0 +1,17 @@
+appId: com.photoslocked.app
+---
+# Page → app messages: on a page with no pictures, "Save pictures from this
+# page" asks the page for them (the injected script answers through the
+# message channel), and the app says it found none.
+- tapOn: ".*github\\.com.*|Search .* or type a URL"
+- eraseText: 150
+- inputText: " https://example.com"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Example Domain"
+    timeout: 30000
+- tapOn: "Save pictures from this page"
+- extendedWaitUntil:
+    visible: "No pictures found on this page"
+    timeout: 10000
+- takeScreenshot: s113_collect_answer

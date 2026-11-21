@@ -215,6 +215,9 @@ else
     res FAIL "no video in Library → Videos" "see ui/videos.xml"
   else
     adb shell input tap $CELL; sleep 3; shot s103_video_viewer
+    # What a tap on the video shows, caught by screenshots (they don't wait for a
+    # still screen); the controls hide again after 5 s.
+    adb shell input tap 540 1146; sleep 0.7; shot s104a_after_tap; sleep 1.5; shot s104b_after_tap; sleep 5
     if fs_enter fs1; then
       shot s104_fullscreen
       sleep 7; adb shell input keyevent 4; sleep 3
@@ -252,6 +255,8 @@ else
   grep -c "Download handed to the app" "$OUT/logcat.txt" > "$OUT/download-log-lines.txt" 2>/dev/null
   adb shell ls /sdcard/Download/ 2>/dev/null | grep -q pl_dl && res FAIL "the download went to the public Download folder"
 fi
+if flow browser_collect browser_collect.yaml; then res PASS "page messages reach the app (Save pictures on a page with none)"; else res FAIL "page messages: no answer to Save pictures" "see maestro-browser_collect.txt"; fi
+grep "pl-diag" "$OUT/logcat.txt" > "$OUT/diag-lines.txt" 2>/dev/null
 recover browser
 alive || { res FAIL "app died in the browser check"; recover browser-dead; }
 
