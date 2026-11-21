@@ -6,6 +6,15 @@ appId: com.photoslocked.app
     visible: "Import Photos"
     timeout: 3000
 - tapOn: "Import Photos"
+# The picker opens on Recent, which on the emulator can stay empty (11-21:
+# "No items"): the Videos tab lists from the media index instead.
+- waitForAnimationToEnd:
+    timeout: 4000
+- runFlow:
+    when:
+      notVisible: "pl_test_v.mp4"
+    commands:
+      - tapOn: "Videos"
 - extendedWaitUntil:
     visible: "pl_test_v.mp4"
     timeout: 15000
