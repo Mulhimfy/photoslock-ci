@@ -1,0 +1,8 @@
+appId: com.photoslocked.app
+---
+# The save sheet → Save to Main Album → the toast says it is in.
+- tapOn: "Save to Main Album"
+- extendedWaitUntil:
+    visible: "Saved to .*"
+    timeout: 30000
+- takeScreenshot: s111_download_saved

@@ -1,0 +1,12 @@
+appId: com.photoslocked.app
+---
+# Browser → a download link (a picture served as an attachment) → the vault's
+# own save sheet comes up instead of a download to the public folder.
+- tapOn: "Browser"
+- tapOn: "Search .* or type a URL"
+- inputText: "https://github.com/Mulhimfy/photoslock-ci/releases/download/test-assets/pl_dl.png"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Save Picture"
+    timeout: 45000
+- takeScreenshot: s110_download_sheet

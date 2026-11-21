@@ -1,0 +1,11 @@
+appId: com.photoslocked.app
+---
+# Library → Videos (the grid with the imported test video).
+- tapOn: "Library"
+- extendedWaitUntil:
+    visible: "Videos"
+    timeout: 8000
+- tapOn: "Videos"
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: s102_videos

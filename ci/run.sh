@@ -173,6 +173,81 @@ for i in 1 2 3 4 5; do
 done
 [ $fast_ok = 5 ] && res PASS "5 relaunches with fast passcode taps all unlock" || res FAIL "fast passcode taps unlocked $fast_ok/5"
 
+# 10b. Fullscreen video (Photos-lock OPEN.md B6). Back from fullscreen after the
+#      5 s grace keeps the vault open; Home from fullscreen closes the player,
+#      and the way back into the app goes through the lock screen.
+locked() { grep -qE 'text="(Enter Passcode|Enter your passcode|Unlock)"' "$OUT/ui/$1.xml"; }
+fs_top() { adb shell dumpsys activity activities 2>/dev/null | grep -E "mResumedActivity|topResumedActivity" | grep -c FullscreenPlayerActivity; }
+fs_any() { adb shell dumpsys activity activities 2>/dev/null | grep -c FullscreenPlayerActivity; }
+# Shows the player's controls and taps its fullscreen button; 0 once fullscreen is up.
+fs_enter() {
+  local i B
+  for i in 1 2 3 4; do
+    adb shell input tap 540 1170; sleep 1.2
+    dump "$1-$i" > /dev/null
+    B=$(bounds "$1-$i" "Enter fullscreen")
+    if [ -n "$B" ]; then
+      read X1 Y1 X2 Y2 <<< "$B"; adb shell input tap $(( (X1 + X2) / 2 )) $(( (Y1 + Y2) / 2 )); sleep 3
+      [ "$(fs_top)" -ge 1 ] && return 0
+    fi
+  done
+  return 1
+}
+adb shell screenrecord --time-limit 4 /sdcard/Movies/pl_test_v.mp4 >/dev/null 2>&1
+adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Movies/pl_test_v.mp4 >/dev/null 2>&1
+adb shell content call --uri content://media --method scan_volume --arg external_primary >/dev/null 2>&1
+sleep 3
+if ! adb shell content query --uri content://media/external/video/media --projection _display_name 2>/dev/null | grep -q pl_test_v; then
+  res INFO "no test video (screenrecord or the media scan failed): fullscreen not checked"
+elif ! flow import_video import_video.yaml; then
+  res FAIL "import the test video" "see maestro-import_video.txt"; recover import_video
+elif ! flow videos videos.yaml; then
+  res FAIL "Library → Videos" "see maestro-videos.txt"; recover videos
+else
+  dump videos > /dev/null
+  CELL=$(python3 "$(pwd)/ci/first_cell.py" "$OUT/ui/videos.xml")
+  if [ -z "$CELL" ]; then
+    res FAIL "no video in Library → Videos" "see ui/videos.xml"
+  else
+    adb shell input tap $CELL; sleep 3; shot s103_video_viewer
+    if fs_enter fs1; then
+      shot s104_fullscreen
+      sleep 7; adb shell input keyevent 4; sleep 3
+      dump fs_back > /dev/null; shot s105_back_from_fullscreen
+      if locked fs_back; then res FAIL "back from fullscreen after 7 s locked the vault"; else res PASS "back from fullscreen after 7 s: the vault stays open"; fi
+      if fs_enter fs2; then
+        adb shell input keyevent 3; sleep 7
+        n=$(fs_any)
+        [ "${n:-1}" = 0 ] && res PASS "Home from fullscreen closes the player" || res FAIL "Home from fullscreen: the player is still there" "dumpsys lines ${n:-?}"
+        adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 4
+        dump fs_return > /dev/null; shot s106_return_after_home
+        if locked fs_return; then res PASS "back in the app after Home from fullscreen: the lock screen"; else res FAIL "back in the app after Home from fullscreen: no lock screen" "see ui/fs_return.xml"; fi
+      else
+        res FAIL "fullscreen did not open the second time" "see ui/fs2-*.xml"
+      fi
+    else
+      res FAIL "the fullscreen button was not found or did not open" "see ui/fs1-*.xml"
+    fi
+  fi
+  recover fullscreen
+fi
+alive || { res FAIL "app died in the fullscreen check"; recover fullscreen-dead; }
+
+# 10c. The browser (Photos-lock OPEN.md B7): a download is offered for the
+#      vault and never put in the public Download folder.
+adb shell rm -f /sdcard/Download/pl_dl.png >/dev/null 2>&1
+if flow browser_download browser_download.yaml; then
+  res PASS "a download in the browser opens the vault's save sheet"
+  sleep 2
+  if adb shell ls /sdcard/Download/ 2>/dev/null | grep -q pl_dl; then res FAIL "the download also went to the public Download folder"; else res PASS "nothing in the public Download folder"; fi
+  if flow browser_save browser_save.yaml; then res PASS "the downloaded picture is saved in the vault"; else res FAIL "saving the download in the vault" "see maestro-browser_save.txt"; fi
+else
+  res FAIL "a download in the browser: no save sheet" "see maestro-browser_download.txt"
+  adb shell ls /sdcard/Download/ 2>/dev/null | grep -q pl_dl && res FAIL "the download went to the public Download folder"
+fi
+recover browser
+alive || { res FAIL "app died in the browser check"; recover browser-dead; }
+
 # 11. The daily reminder: saved and handed to the alarm manager.
 adb shell dumpsys alarm > "$OUT/alarms.txt" 2>/dev/null
 alarms=$(grep -c "$PKG" "$OUT/alarms.txt" 2>/dev/null)
