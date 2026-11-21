@@ -1,4 +1,4 @@
-// Built with the app's own modules/photoslock-cipher/ios/NotesCipherCore.swift:
+// main.swift (top-level code is allowed only here), built with the app's own modules/photoslock-cipher/ios/NotesCipherCore.swift:
 // CryptoKit must open what the JS library sealed, seal the same bytes, and
 // refuse a note under another id. Prints PASS / FAIL lines.
 import Foundation

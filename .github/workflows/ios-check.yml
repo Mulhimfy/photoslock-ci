@@ -1,6 +1,8 @@
 # Photos Lock: an iOS build for the simulator at a Photos-lock commit, launched
 # once, then the checks that need iOS: the app starts, and its Documents folder
 # (the whole vault) is excluded from iCloud and computer backups (OPEN.md I4).
+# Signed ad hoc ("-", no team), which the simulator accepts: an unsigned app
+# cannot use the Keychain, so the passcode could not be saved (run 44926637725).
 # Nothing is signed, uploaded or published. Workflows only: the app source is
 # checked out at run time with a read-only deploy key (no credentials kept).
 # Every log is encrypted before upload; the public page shows only
@@ -57,7 +59,9 @@ jobs:
             echo "workspace $WS scheme $SCHEME"
             xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator \
               -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" \
-              ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+              ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
+              CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual \
+              CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= build
           } > "$RUNNER_TEMP/out/build.log" 2>&1
           rc=$?
           grep -n "PhotosLockBackup" ios/*/AppDelegate.swift > "$RUNNER_TEMP/out/appdelegate-lines.txt" 2>/dev/null
@@ -76,7 +80,7 @@ jobs:
         run: |
           cd app
           NODE_PATH="$PWD/node_modules" node ../ci/ios/vectors.js > "$RUNNER_TEMP/vectors.json"
-          swiftc -O modules/photoslock-cipher/ios/NotesCipherCore.swift ../ci/ios/cipher_check.swift -o "$RUNNER_TEMP/cipher_check" > "$RUNNER_TEMP/out/cipher-build.log" 2>&1 \
+          swiftc -O modules/photoslock-cipher/ios/NotesCipherCore.swift ../ci/ios/cipher/main.swift -o "$RUNNER_TEMP/cipher_check" > "$RUNNER_TEMP/out/cipher-build.log" 2>&1 \
             && "$RUNNER_TEMP/cipher_check" "$RUNNER_TEMP/vectors.json" | tee -a "$RUNNER_TEMP/out/summary.txt" \
             || echo "FAIL the cipher check did not build or run" | tee -a "$RUNNER_TEMP/out/summary.txt"
       - name: Install Maestro
