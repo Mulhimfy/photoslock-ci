@@ -1,8 +1,8 @@
 appId: com.photoslocked.app
 ---
-# The save sheet → Save to Main Album → the toast says it is in.
+# The save sheet → Save to Main Album. Whether it got in is read from the Main
+# Album's count afterwards (run.sh): the "Saved to …" toast is gone in seconds.
 - tapOn: "Save to Main Album"
-- extendedWaitUntil:
-    visible: "Saved to .*"
-    timeout: 30000
-- takeScreenshot: s111_download_saved
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: s111_download_saving

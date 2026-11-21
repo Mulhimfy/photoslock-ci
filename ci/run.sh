@@ -269,12 +269,27 @@ alive || { res FAIL "app died in the fullscreen check"; recover fullscreen-dead;
 
 # 10c. The browser (Photos-lock OPEN.md B7): a download is offered for the
 #      vault and never put in the public Download folder.
+# The Main Album's item count on the Albums screen, from dump $1 (empty if not found).
+main_count() {
+  python3 - "$OUT/ui/$1.xml" <<'PY'
+import re, sys
+texts = re.findall(r' text="([^"]*)"', open(sys.argv[1], encoding='utf-8', errors='ignore').read())
+for i, t in enumerate(texts):
+    if t == 'Main Album':
+        for u in texts[i + 1:i + 4]:
+            m = re.match(r'^(\d+) items?$', u)
+            if m:
+                print(m.group(1)); sys.exit()
+PY
+}
+dump pre_dl > /dev/null; before=$(main_count pre_dl)
+saved=no
 adb shell rm -f /sdcard/Download/pl_dl.png >/dev/null 2>&1
 if flow browser_download browser_download.yaml; then
   res PASS "a download in the browser opens the vault's save sheet"
   sleep 2
   if adb shell ls /sdcard/Download/ 2>/dev/null | grep -q pl_dl; then res FAIL "the download also went to the public Download folder"; else res PASS "nothing in the public Download folder"; fi
-  if flow browser_save browser_save.yaml; then res PASS "the downloaded picture is saved in the vault"; else res FAIL "saving the download in the vault" "see maestro-browser_save.txt"; fi
+  if flow browser_save browser_save.yaml; then saved=tapped; sleep 6; else res FAIL "Save to Main Album not tapped" "see maestro-browser_save.txt"; fi
 else
   res FAIL "a download in the browser: no save sheet" "see maestro-browser_download.txt"
   dump browser_fail > /dev/null; shot s112_browser_fail
@@ -282,8 +297,11 @@ else
   adb shell ls /sdcard/Download/ 2>/dev/null | grep -q pl_dl && res FAIL "the download went to the public Download folder"
 fi
 if flow browser_collect browser_collect.yaml; then res PASS "page messages reach the app (Save pictures on a page with none)"; else res FAIL "page messages: no answer to Save pictures" "see maestro-browser_collect.txt"; fi
-grep "pl-diag" "$OUT/logcat.txt" > "$OUT/diag-lines.txt" 2>/dev/null
 recover browser
+if [ "$saved" = tapped ]; then
+  dump post_dl > /dev/null; after=$(main_count post_dl)
+  if [ -n "$before" ] && [ "$after" = "$((before + 1))" ]; then res PASS "the downloaded picture is saved in the vault" "Main Album $before -> $after"; else res FAIL "the downloaded picture is not in the vault" "Main Album '$before' -> '$after'"; fi
+fi
 alive || { res FAIL "app died in the browser check"; recover browser-dead; }
 
 if [ "${CHECKS:-all}" = all ]; then
