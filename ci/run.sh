@@ -184,7 +184,11 @@ fi # CHECKS=all, sections 2 to 10
 #      and the way back into the app goes through the lock screen.
 locked() { grep -qE 'text="(Enter Passcode|Enter your passcode|Unlock)"' "$OUT/ui/$1.xml"; }
 fs_top() { adb shell dumpsys activity activities 2>/dev/null | grep -E "mResumedActivity|topResumedActivity" | grep -c FullscreenPlayerActivity; }
-fs_any() { adb shell dumpsys activity activities 2>/dev/null | grep -c FullscreenPlayerActivity; }
+# Live records only ("Hist #"): a finished one can linger in fields like mLastPausedActivity.
+fs_any() {
+  adb shell dumpsys activity activities 2>/dev/null | grep FullscreenPlayerActivity > "$OUT/fs-records-$1.txt"
+  grep -cE "Hist #[0-9]+: ActivityRecord" "$OUT/fs-records-$1.txt"
+}
 # Taps the player's fullscreen button through Maestro (flows/fullscreen.yaml); 0
 # once fullscreen is up. A uiautomator dump waits for an idle screen, which a
 # playing video's progress bar never gives: by the time it came, the controls
@@ -225,11 +229,15 @@ else
       if locked fs_back; then res FAIL "back from fullscreen after 7 s locked the vault"; else res PASS "back from fullscreen after 7 s: the vault stays open"; fi
       if fs_enter fs2; then
         adb shell input keyevent 3; sleep 7
-        n=$(fs_any)
-        [ "${n:-1}" = 0 ] && res PASS "Home from fullscreen closes the player" || res FAIL "Home from fullscreen: the player is still there" "dumpsys lines ${n:-?}"
-        adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 4
+        n=$(fs_any home)
+        [ "${n:-1}" = 0 ] && res PASS "Home from fullscreen closes the player" || res FAIL "Home from fullscreen: the player is still there" "live records ${n:-?}, see fs-records-home.txt"
+        # Back through Recents, the way that brought the player back above the
+        # lock (the launcher icon clears it anyway: MainActivity is singleTask).
+        adb shell input keyevent 187; sleep 2.5; shot s106a_recents
+        adb shell input tap 540 1170; sleep 4
         dump fs_return > /dev/null; shot s106_return_after_home
-        if locked fs_return; then res PASS "back in the app after Home from fullscreen: the lock screen"; else res FAIL "back in the app after Home from fullscreen: no lock screen" "see ui/fs_return.xml"; fi
+        adb shell dumpsys activity activities 2>/dev/null | grep -E "mResumedActivity|topResumedActivity" > "$OUT/fs-resumed.txt"
+        if locked fs_return; then res PASS "back through Recents after Home from fullscreen: the lock screen"; else res FAIL "back through Recents after Home from fullscreen: no lock screen" "see ui/fs_return.xml, fs-resumed.txt"; fi
       else
         res FAIL "fullscreen did not open the second time" "see maestro-fs2-*.txt"
       fi

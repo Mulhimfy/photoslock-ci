@@ -3,8 +3,11 @@ appId: com.photoslocked.app
 # Page → app messages: on a page with no pictures, "Save pictures from this
 # page" asks the page for them (the injected script answers through the
 # message channel), and the app says it found none.
-- tapOn: ".*github\\.com.*|Search .* or type a URL"
-- eraseText: 150
+# Browser home empties the address bar (clearing it by keys garbled the text).
+- tapOn: "Browser home"
+- tapOn: "Search .* or type a URL"
+- waitForAnimationToEnd:
+    timeout: 2000
 - inputText: " https://example.com"
 - pressKey: Enter
 - extendedWaitUntil:
