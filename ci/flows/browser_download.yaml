@@ -4,7 +4,11 @@ appId: com.photoslocked.app
 # own save sheet comes up instead of a download to the public folder.
 - tapOn: "Browser"
 - tapOn: "Search .* or type a URL"
-- inputText: "https://github.com/Mulhimfy/photoslock-ci/releases/download/test-assets/pl_dl.png"
+- waitForAnimationToEnd:
+    timeout: 2000
+# The first key can be lost while the keyboard comes up (11-21: "ttps://…"
+# became a search): a leading space takes that place, and the app trims it.
+- inputText: " https://github.com/Mulhimfy/photoslock-ci/releases/download/test-assets/pl_dl.png"
 - pressKey: Enter
 - extendedWaitUntil:
     visible: "Save Picture"

@@ -179,17 +179,38 @@ done
 locked() { grep -qE 'text="(Enter Passcode|Enter your passcode|Unlock)"' "$OUT/ui/$1.xml"; }
 fs_top() { adb shell dumpsys activity activities 2>/dev/null | grep -E "mResumedActivity|topResumedActivity" | grep -c FullscreenPlayerActivity; }
 fs_any() { adb shell dumpsys activity activities 2>/dev/null | grep -c FullscreenPlayerActivity; }
-# Shows the player's controls and taps its fullscreen button; 0 once fullscreen is up.
+# bounds of the first node whose content-desc contains $2 (any case), from dump $1
+bounds_like() {
+  python3 - "$OUT/ui/$1.xml" "$2" <<'PY'
+import re, sys
+x = open(sys.argv[1], encoding='utf-8', errors='ignore').read()
+for n in re.findall(r'<node [^>]*>', x):
+    d = re.search(r'content-desc="([^"]*)"', n)
+    if d and sys.argv[2].lower() in d.group(1).lower():
+        b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n)
+        print(*b.groups()); break
+PY
+}
+# Taps the player's fullscreen button; 0 once fullscreen is up. The button is
+# on the player's controls, and a dump waits for an idle screen, which a
+# playing video's progress bar never gives: the controls had hidden again by
+# the time it came. So the controls are shown, and the play/pause button at
+# their centre is tapped: a paused player keeps its controls up.
 fs_enter() {
-  local i B
+  local i B P
   for i in 1 2 3 4; do
-    adb shell input tap 540 1170; sleep 1.2
     dump "$1-$i" > /dev/null
-    B=$(bounds "$1-$i" "Enter fullscreen")
+    B=$(bounds_like "$1-$i" "enter fullscreen")
     if [ -n "$B" ]; then
       read X1 Y1 X2 Y2 <<< "$B"; adb shell input tap $(( (X1 + X2) / 2 )) $(( (Y1 + Y2) / 2 )); sleep 3
       [ "$(fs_top)" -ge 1 ] && return 0
+      continue
     fi
+    P=$(bounds_like "$1-$i" "player controls")
+    [ -n "$P" ] || { sleep 2; continue; }
+    read X1 Y1 X2 Y2 <<< "$P"
+    adb shell input tap $(( (X1 + X2) / 2 )) $(( (Y1 + Y2) / 2 )); sleep 1
+    adb shell input tap $(( (X1 + X2) / 2 )) $(( (Y1 + Y2) / 2 )); sleep 1.5
   done
   return 1
 }
