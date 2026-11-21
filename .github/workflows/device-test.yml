@@ -11,6 +11,9 @@ on:
       ref:
         description: Photos-lock branch or commit
         default: main
+      checks:
+        description: "all, or new: the first run and the newest checks only (a quicker round)"
+        default: all
 permissions:
   contents: read
 concurrency:
@@ -90,6 +93,8 @@ jobs:
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - uses: reactivecircus/android-emulator-runner@v2
+        env:
+          CHECKS: ${{ inputs.checks == 'new' && 'new' || 'all' }}
         with:
           api-level: 30
           arch: x86_64
@@ -100,7 +105,7 @@ jobs:
           disk-size: 4G
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: false
-          script: bash ci/run.sh "$RUNNER_TEMP/app.apk" "$RUNNER_TEMP/out"
+          script: CHECKS="$CHECKS" bash ci/run.sh "$RUNNER_TEMP/app.apk" "$RUNNER_TEMP/out"
       - name: Results (public lines are PASS / FAIL only)
         if: always()
         run: |

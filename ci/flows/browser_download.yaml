@@ -10,7 +10,9 @@ appId: com.photoslocked.app
 # became a search): a leading space takes that place, and the app trims it.
 - inputText: " https://github.com/Mulhimfy/photoslock-ci/releases/download/test-assets/pl_dl.png"
 - pressKey: Enter
+# The sheet, or one of the browser's two answers to a download it refuses.
 - extendedWaitUntil:
-    visible: "Save Picture"
+    visible: "Save Picture|Save Video|Only photos and videos can go in the vault|Could not save that"
     timeout: 45000
-- takeScreenshot: s110_download_sheet
+- takeScreenshot: s110_download_answer
+- assertVisible: "Save Picture"

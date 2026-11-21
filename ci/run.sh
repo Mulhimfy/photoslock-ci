@@ -58,6 +58,10 @@ sleep 3
 adb shell content query --uri content://media/external/images/media --projection _display_name 2>/dev/null | grep -q pl_test_1 \
   && log "test picture indexed" || log "test picture NOT indexed"
 
+# CHECKS=new (the workflow's `checks` input) runs only the first run, 10b, 10c
+# and the logcat checks: a quicker round while a new check is made to work.
+if [ "${CHECKS:-all}" = all ]; then
+
 # 2. The + button's top half (it used to stand outside the tab bar's bounds,
 #    where Android dropped the touch). Three taps on its top edge.
 dump main0 > /dev/null
@@ -173,44 +177,24 @@ for i in 1 2 3 4 5; do
 done
 [ $fast_ok = 5 ] && res PASS "5 relaunches with fast passcode taps all unlock" || res FAIL "fast passcode taps unlocked $fast_ok/5"
 
+fi # CHECKS=all, sections 2 to 10
+
 # 10b. Fullscreen video (Photos-lock OPEN.md B6). Back from fullscreen after the
 #      5 s grace keeps the vault open; Home from fullscreen closes the player,
 #      and the way back into the app goes through the lock screen.
 locked() { grep -qE 'text="(Enter Passcode|Enter your passcode|Unlock)"' "$OUT/ui/$1.xml"; }
 fs_top() { adb shell dumpsys activity activities 2>/dev/null | grep -E "mResumedActivity|topResumedActivity" | grep -c FullscreenPlayerActivity; }
 fs_any() { adb shell dumpsys activity activities 2>/dev/null | grep -c FullscreenPlayerActivity; }
-# bounds of the first node whose content-desc contains $2 (any case), from dump $1
-bounds_like() {
-  python3 - "$OUT/ui/$1.xml" "$2" <<'PY'
-import re, sys
-x = open(sys.argv[1], encoding='utf-8', errors='ignore').read()
-for n in re.findall(r'<node [^>]*>', x):
-    d = re.search(r'content-desc="([^"]*)"', n)
-    if d and sys.argv[2].lower() in d.group(1).lower():
-        b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n)
-        print(*b.groups()); break
-PY
-}
-# Taps the player's fullscreen button; 0 once fullscreen is up. The button is
-# on the player's controls, and a dump waits for an idle screen, which a
-# playing video's progress bar never gives: the controls had hidden again by
-# the time it came. So the controls are shown, and the play/pause button at
-# their centre is tapped: a paused player keeps its controls up.
+# Taps the player's fullscreen button through Maestro (flows/fullscreen.yaml); 0
+# once fullscreen is up. A uiautomator dump waits for an idle screen, which a
+# playing video's progress bar never gives: by the time it came, the controls
+# had hidden again (runs 44893444682, 44896373959).
 fs_enter() {
-  local i B P
-  for i in 1 2 3 4; do
-    dump "$1-$i" > /dev/null
-    B=$(bounds_like "$1-$i" "enter fullscreen")
-    if [ -n "$B" ]; then
-      read X1 Y1 X2 Y2 <<< "$B"; adb shell input tap $(( (X1 + X2) / 2 )) $(( (Y1 + Y2) / 2 )); sleep 3
-      [ "$(fs_top)" -ge 1 ] && return 0
-      continue
-    fi
-    P=$(bounds_like "$1-$i" "player controls")
-    [ -n "$P" ] || { sleep 2; continue; }
-    read X1 Y1 X2 Y2 <<< "$P"
-    adb shell input tap $(( (X1 + X2) / 2 )) $(( (Y1 + Y2) / 2 )); sleep 1
-    adb shell input tap $(( (X1 + X2) / 2 )) $(( (Y1 + Y2) / 2 )); sleep 1.5
+  local i
+  for i in 1 2 3; do
+    flow "$1-$i" fullscreen.yaml >/dev/null 2>&1
+    sleep 2
+    [ "$(fs_top)" -ge 1 ] && return 0
   done
   return 1
 }
@@ -244,10 +228,10 @@ else
         dump fs_return > /dev/null; shot s106_return_after_home
         if locked fs_return; then res PASS "back in the app after Home from fullscreen: the lock screen"; else res FAIL "back in the app after Home from fullscreen: no lock screen" "see ui/fs_return.xml"; fi
       else
-        res FAIL "fullscreen did not open the second time" "see ui/fs2-*.xml"
+        res FAIL "fullscreen did not open the second time" "see maestro-fs2-*.txt"
       fi
     else
-      res FAIL "the fullscreen button was not found or did not open" "see ui/fs1-*.xml"
+      res FAIL "the fullscreen button was not found or did not open" "see maestro-fs1-*.txt"
     fi
   fi
   recover fullscreen
@@ -264,11 +248,14 @@ if flow browser_download browser_download.yaml; then
   if flow browser_save browser_save.yaml; then res PASS "the downloaded picture is saved in the vault"; else res FAIL "saving the download in the vault" "see maestro-browser_save.txt"; fi
 else
   res FAIL "a download in the browser: no save sheet" "see maestro-browser_download.txt"
+  dump browser_fail > /dev/null; shot s112_browser_fail
+  grep -c "Download handed to the app" "$OUT/logcat.txt" > "$OUT/download-log-lines.txt" 2>/dev/null
   adb shell ls /sdcard/Download/ 2>/dev/null | grep -q pl_dl && res FAIL "the download went to the public Download folder"
 fi
 recover browser
 alive || { res FAIL "app died in the browser check"; recover browser-dead; }
 
+if [ "${CHECKS:-all}" = all ]; then
 # 11. The daily reminder: saved and handed to the alarm manager.
 adb shell dumpsys alarm > "$OUT/alarms.txt" 2>/dev/null
 alarms=$(grep -c "$PKG" "$OUT/alarms.txt" 2>/dev/null)
@@ -293,6 +280,9 @@ alive && log "app alive at end" || log "app NOT running at end"
 kill $LOGPID 2>/dev/null
 notif=$(grep -c "expo-notifications: Action .* failed" "$OUT/logcat.txt" 2>/dev/null)
 [ "${notif:-0}" = 0 ] && [ "${alarms:-0}" -ge 1 ] && res PASS "reminder saved and scheduled" "alarm lines: $alarms" || res FAIL "reminder not scheduled" "save failures ${notif:-0}, alarm lines ${alarms:-0}"
+
+fi # CHECKS=all, section 11
+[ "${CHECKS:-all}" = all ] || kill $LOGPID 2>/dev/null
 
 # 12. React Native's animation engine: its own error lines, and JS errors.
 anim=$(grep -cE "Native animation workaround|Mapped style node|Mapped property node|animation cycle or disconnected graph" "$OUT/logcat.txt" 2>/dev/null)

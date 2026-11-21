@@ -1,0 +1,12 @@
+appId: com.photoslocked.app
+---
+# The viewer's video: its controls up (a tap shows them for 5 s), then its
+# fullscreen button. Maestro reads the screen without waiting for it to go
+# still, which a playing video never does.
+- runFlow:
+    when:
+      notVisible: ".*[Ff]ullscreen.*"
+    commands:
+      - tapOn:
+          point: "50%,50%"
+- tapOn: ".*[Ff]ullscreen.*"
