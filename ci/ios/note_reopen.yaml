@@ -1,7 +1,8 @@
 appId: com.photo-locked.app
 ---
 # iOS reads a row's label with its count ("Secure Notes, 0"): patterns, not exact text.
-# Relaunch, unlock, open the note again: read back from the file, opened by CryptoKit.
+# Relaunch, unlock, open the note again: its title in the list and in the
+# editor was read back from the file and opened by CryptoKit.
 - launchApp:
     stopApp: true
 - extendedWaitUntil:
@@ -24,6 +25,7 @@ appId: com.photo-locked.app
     timeout: 10000
 - tapOn: ".*CI sealed note.*"
 - extendedWaitUntil:
-    visible: ".*opened by CryptoKit.*"
+    visible: "Delete note"
     timeout: 10000
+- assertVisible: "CI sealed note"
 - takeScreenshot: i11_note_reopened

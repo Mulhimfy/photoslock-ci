@@ -1,7 +1,8 @@
 appId: com.photo-locked.app
 ---
 # iOS reads a row's label with its count ("Secure Notes, 0"): patterns, not exact text.
-# A new secure note: sealed on save by notesCipher.ios.js, so by CryptoKit.
+# A new secure note: sealed on save by notesCipher.ios.js, so by CryptoKit. The
+# title alone is enough: the whole note (title, body, pin) is sealed as one.
 - tapOn: "Library"
 - extendedWaitUntil:
     visible: "Secure Notes.*"
@@ -13,8 +14,12 @@ appId: com.photo-locked.app
 - tapOn: ".*New Note.*"
 - tapOn: "Title.*"
 - inputText: "CI sealed note"
-- tapOn: "Write something private.*"
-- inputText: "opened by CryptoKit"
+# The keyboard's one-time slide-to-type tip.
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
 - tapOn: "Back"
 - extendedWaitUntil:
     visible: ".*CI sealed note.*"
